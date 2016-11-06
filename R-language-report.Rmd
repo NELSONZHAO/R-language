@@ -1,0 +1,131 @@
+---
+title: "R-language-report"
+output: html_document
+---
+# Description
+
+##导入包
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+##导入数据
+```{r setup, include=FALSE}
+# import data
+setwd('/Users/apple/Desktop/ml-latest')
+movies <- read.csv('movies.csv', header = T, stringsAsFactors = F)
+ratings <- read.csv('ratings.csv', header = T, stringsAsFactors = F)
+```
+
+##数据处理及合并
+
+```{r}
+# add a new column called year
+titles <- movies$title
+movies <- mutate(movies, year0 = substr(titles, regexpr('\\([0-9]{4}\\)', titles), regexpr('\\([0-9]{4}\\)', titles) + 5))
+# drop invalid data
+movies <- movies[order(movies$year0), ]
+movies <- mutate(movies, year = substr(movies$year0, regexpr('[0-9]{4}',  movies$year0), regexpr('[0-9]{4}', movies$year0) + 3))
+movies <- movies[(movies$year>=1874 & movies$year<=2016), c('movieId', 'title', 'genres', 'year')]
+# 把电影类型生成dummy
+all_genres <- unique(unlist(strsplit(movies$genres, '|', fixed = T)))
+# 将所有电影类型生成一个vector
+genre <- all_genres[order(all_genres)]
+# 生成dummies的数据框
+dummies <- data.frame(matrix(0, nrow = dim(movies)[1], ncol = length(genre)))
+names(dummies) <- genre
+# 循环movies的genres列，将dummies对应位置赋为1
+for (i in 1:dim(movies)[1]){
+  dummies[i, as.vector(unlist(strsplit(movies$genres[i], '|', fixed = T)))] = 1
+}
+# merge movies and dummies
+movies_final <- cbind.data.frame(movies, dummies)
+```
+
+##对电影数据进行分析
+
+```{r}
+library(colorspace)
+# 电影数据的分类柱状图
+count_by_genres <- colSums(dummies)
+data1 <- count_by_genres[order(count_by_genres, decreasing = T)]
+barplot(data1, cex.names = 0.5, ylim = c(0, 20000), col = rainbow_hcl(length(data1)), main = 'The histogram of the number of movies by genres')
+# 电影数据的分类扇形图及fan图
+genres_pct <- data.frame(names(dummies), round(count_by_genres*100/sum(count_by_genres) ,2))
+names(genres_pct) <- c('genre', 'pct')
+genres_pct <- genres_pct[order(genres_pct$pct, decreasing = T),]
+pie_label <- paste(genres_pct$genre, genres_pct$pct, '%')
+# pie(count_by_genres, labels = pie_label, col = rainbow_hcl(length(count_by_genres)), main = 'The pie of the proportion of each genre of movies', clockwise = T)
+ggplot(genres_pct, aes(x='', y = pct, fill = genre))+geom_bar(stat = "identity", width = 1) + coord_polar(theta = "y") + labs(x = "", y = "", title = "") + theme(legend.title = element_blank(), legend.position = "right") + scale_fill_discrete(breaks = genres_pct$genre, labels = pie_label)
+
+library(plotrix)
+fan.plot(count_by_genres, labels = names(dummies), col= terrain.colors(length(count_by_genres)), main = 'The fan plot of the proportion of each genre of movies')
+# 每年电影上映数量的变化（折线）
+year_num <- count(movies_final, year)
+plot(year_num, pch = 15, type = 'b', xlab = 'year', ylab = 'The number of movies', main = 'The number of movies released every year', col = rainbow(dim(year_num)[1]))
+# 统计每年不同类型电影的上映数量
+```
+
+```{r}
+library(lubridate)
+# 对ratings表进行处理，将timestamp格式进行转换
+ratings <- mutate(ratings, date = as.POSIXct(timestamp, origin = '1970-01-01 00:00:00'), year = year(date), month = month(date), hour = hour(date))
+ratings <- ratings[, c('userId', 'movieId', 'rating', 'year', 'month', 'hour')]
+# 将movies表与ratings表进行连接
+movie_ratings <- merge(movies_final, ratings, by = 'movieId') 
+```
+
+```{r}
+# 对用户评论行为进行分析
+# 绘制用户每年平均评论数量变化
+ratings_year <- count(ratings, year)
+avg_ratings_year <- ratings_year[ratings_year$year > 1995,]$n / year_num[year_num$year > 1995,]$n
+plot(avg_ratings_year, type = 'b', pch = 17, main = 'The average number of ratings every year per movie', ylab = 'The number of ratings', xlab = 'year',  xaxt = 'n', col = rainbow_hcl(2)[1])
+axis(1, at = 1996:2016, las = 1)
+par(new = T)
+plot(ratings_year[ratings_year$year > 1995,], type = 'b', yaxt = 'n', ylab = NA , pch = 15, col = rainbow_hcl(2)[2])
+axis(side = 4, at = 0:300)
+# 绘制用户的每个月评分数量
+ratings_month <- count(ratings, month)
+barplot(as.matrix(ratings_month)[,2], beside = T, col = rainbow_hcl(12), ylim = c(0, 3000000), main = 'The number of ratings by month', names.arg = c(1:12))
+# 绘制用户每天评论的时间点
+ratings_hour <- count(ratings, hour)
+hour_table <- matrix(as.data.frame(ratings_hour)[,2], 3, 8, byrow = T, dimnames = list(c('night','day','evening'), paste(c(1:8), 'th', sep = '')))
+heatmap(hour_table, Rowv = NA, Colv = NA, cexRow = 1, cexCol = 1, xlab = 'Time Quantile', ylab = 'Time Span')
+```
+
+```{r}
+# 对电影评分进行分析
+movie_ratings <- movie_ratings[, -3]
+count_ratings_by_title <- count(movie_ratings, title)
+# 计算所有电影的平均分过滤掉评论数量小于50条的电影
+title_50 <- count_ratings_by_title[count_ratings_by_title$n >= 50, ]
+ratings_by_title <- summarise(group_by(movie_ratings, title), mean(rating), sd(rating))
+ratings_by_title_50 <- merge(ratings_by_title, title_50, by = 'title')
+# 给数据表增加电影好坏程度评价
+ratings_by_title_50 <- within(ratings_by_title_50, {
+  type <- NA
+  type[`mean(rating)` >= 3.5] <- 'good'
+  type[`mean(rating)` >= 2 & `mean(rating)` < 3.5] <- 'medium'
+  type[`mean(rating)` < 2] <- 'bad'
+})
+# 按照评论数量
+order_by_n <- ratings_by_title_50[order(ratings_by_title_50$n, decreasing = T),]
+# 按照均分排名
+order_by_mean <- ratings_by_title_50[order(ratings_by_title_50$`mean(rating)`, decreasing = T),]
+# 按照标准差排名（评分差异最大）
+order_by_sd <- ratings_by_title_50[order(ratings_by_title_50$`sd(rating)`, decreasing = T),]
+# 绘制电影的好坏程度与评论数量
+p <- ggplot(data = ratings_by_title_50, mapping = aes(x = `mean(rating)`, y = n, colour = type))
+p + geom_point()
+# 绘制电影的评论数量与评分差异
+p <- ggplot(data = ratings_by_title_50, mapping = aes(x = `sd(rating)`, y = n, colour = type))
+p + geom_point()
+# 绘制电影的好坏程度与评分差异
+p <- ggplot(data = ratings_by_title_50, mapping = aes(x = `mean(rating)`, y = `sd(rating)`, colour = type))
+p + geom_point()
+```
+
+```{r}
+
+```
