@@ -64,6 +64,17 @@ fan.plot(count_by_genres, labels = names(dummies), col= terrain.colors(length(co
 year_num <- count(movies_final, year)
 plot(year_num, pch = 15, type = 'b', xlab = 'year', ylab = 'The number of movies', main = 'The number of movies released every year', col = rainbow(dim(year_num)[1]))
 # 统计每年不同类型电影的上映数量
+names(movies_final)
+sum_genres_year <- function(x){
+  expr <- paste('summarise(group_by(movies_final, year), sum(`', x, '`))', sep = '')
+  eval(parse(text = expr))
+}
+result_sum_genres_year <- lapply(genre[1:length(genre)], sum_genres_year)
+result_genres_year <- data.frame(result_sum_genres_year)[,-seq(3,40,2)]
+#plot(result_genres_year[,2])
+dev.new()
+barplot(t(result_genres_year[result_genres_year$year >= 2000, ])[-1, ], col = rainbow_hcl(20), names.arg = seq(2000,2016))
+legend('topright', legend = genre, fill = rainbow_hcl(20), text.width = 1)
 ```
 
 ```{r}
