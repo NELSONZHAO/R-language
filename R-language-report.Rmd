@@ -135,6 +135,8 @@ p + geom_point()
 # 绘制电影的好坏程度与评分差异
 p <- ggplot(data = ratings_by_title_50, mapping = aes(x = `mean(rating)`, y = `sd(rating)`, colour = type))
 p + geom_point()
+# 绘制电影评分分布
+qplot(`mean(rating)`, data = ratings_by_title_50, binwidth = 0.01,fill = type)
 ```
 
 ```{r}
