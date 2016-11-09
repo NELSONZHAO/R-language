@@ -5,17 +5,23 @@ output: html_document
 # Description
 
 ##导入包
-```{r}
+```{r, echo=FALSE}
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(DBI)
+library(RMySQL)
 ```
 ##导入数据
 ```{r setup, include=FALSE}
 # import data
-setwd('/Users/apple/Desktop/ml-latest')
-movies <- read.csv('movies.csv', header = T, stringsAsFactors = F)
-ratings <- read.csv('ratings.csv', header = T, stringsAsFactors = F)
+con <- dbConnect(MySQL(),host="127.0.0.1",dbname="R_report",user="root",password="940720")
+movies <- dbReadTable(con, "movies")
+users <- dbReadTable(con, "users")
+ratings <- dbReadTable(con, "ratings")
+#setwd('/Users/apple/Desktop/ml-latest')
+#movies <- read.csv('movies.csv', header = T, stringsAsFactors = F)
+#ratings_t <- read.csv('ratings.csv', header = T, stringsAsFactors = F)
 ```
 
 ##数据处理及合并
@@ -27,7 +33,7 @@ movies <- mutate(movies, year0 = substr(titles, regexpr('\\([0-9]{4}\\)', titles
 # drop invalid data
 movies <- movies[order(movies$year0), ]
 movies <- mutate(movies, year = substr(movies$year0, regexpr('[0-9]{4}',  movies$year0), regexpr('[0-9]{4}', movies$year0) + 3))
-movies <- movies[(movies$year>=1874 & movies$year<=2016), c('movieId', 'title', 'genres', 'year')]
+movies <- movies[, c('movieid', 'title', 'genres', 'year')]
 # 把电影类型生成dummy
 all_genres <- unique(unlist(strsplit(movies$genres, '|', fixed = T)))
 # 将所有电影类型生成一个vector
@@ -40,7 +46,7 @@ for (i in 1:dim(movies)[1]){
   dummies[i, as.vector(unlist(strsplit(movies$genres[i], '|', fixed = T)))] = 1
 }
 # merge movies and dummies
-movies_final <- cbind.data.frame(movies, dummies)
+movies_final <- cbind.data.frame(movies[, -3], dummies)
 ```
 
 ##对电影数据进行分析
@@ -50,7 +56,7 @@ library(colorspace)
 # 电影数据的分类柱状图
 count_by_genres <- colSums(dummies)
 data1 <- count_by_genres[order(count_by_genres, decreasing = T)]
-barplot(data1, cex.names = 0.5, ylim = c(0, 20000), col = rainbow_hcl(length(data1)), main = 'The histogram of the number of movies by genres')
+barplot(data1, cex.names = 0.5, ylim = c(0, 2000), col = rainbow_hcl(length(data1)), main = 'The histogram of the number of movies by genres')
 # 电影数据的分类扇形图及fan图
 genres_pct <- data.frame(names(dummies), round(count_by_genres*100/sum(count_by_genres) ,2))
 names(genres_pct) <- c('genre', 'pct')
@@ -65,7 +71,6 @@ fan.plot(count_by_genres, labels = names(dummies), col= terrain.colors(length(co
 year_num <- count(movies_final, year)
 plot(year_num, pch = 15, type = 'b', xlab = 'year', ylab = 'The number of movies', main = 'The number of movies released every year', col = rainbow(dim(year_num)[1]))
 # 统计每年不同类型电影的上映数量
-names(movies_final)
 sum_genres_year <- function(x){
   expr <- paste('summarise(group_by(movies_final, year), sum(`', x, '`))', sep = '')
   eval(parse(text = expr))
@@ -74,32 +79,34 @@ result_sum_genres_year <- lapply(genre[1:length(genre)], sum_genres_year)
 result_genres_year <- data.frame(result_sum_genres_year)[,-seq(3,40,2)]
 #plot(result_genres_year[,2])
 #dev.new()
-accumulated_data <- result_genres_year[result_genres_year$year >= 2000, ]
+accumulated_data <- result_genres_year[result_genres_year$year >= 1990, ]
 names(accumulated_data) <- c('year', genre)
-accumulated_data_long <- gather(accumulated_data, genre, count, `(no genres listed)`:Western)
-
-barplot(t(result_genres_year[result_genres_year$year >= 2000, ])[-1, ], col = rainbow_hcl(20), names.arg = seq(2000,2016))
-legend('topright', legend = genre, fill = rainbow_hcl(20), text.width = 1)
+accumulated_data_long <- gather(accumulated_data, genre, count, Action:Western)
+genre_stack <- ggplot(accumulated_data_long, mapping = aes(x=year,y=count,fill=genre))+geom_bar(stat = 'identity', position = 'fill')+labs(title = 'The stack hist of different genres movies by year')+ylab('Percentage')
+genre_stack
+#barplot(t(result_genres_year[result_genres_year$year >= 2000, ])[-1, ], col = rainbow_hcl(20), names.arg = seq(2000,2016))
+#legend('topright', legend = genre, fill = rainbow_hcl(20), text.width = 1)
 ```
 
 ```{r}
 library(lubridate)
 # 对ratings表进行处理，将timestamp格式进行转换
+ratings$timestamp <- as.integer(ratings$timestamp)
 ratings <- mutate(ratings, date = as.POSIXct(timestamp, origin = '1970-01-01 00:00:00'), year = year(date), month = month(date), hour = hour(date))
-ratings <- ratings[, c('userId', 'movieId', 'rating', 'year', 'month', 'hour')]
+ratings <- ratings[, c('userid', 'movieid', 'rating', 'year', 'month', 'hour')]
 # 将movies表与ratings表进行连接
-movie_ratings <- merge(movies_final, ratings, by = 'movieId') 
+movie_ratings <- merge(movies_final, ratings, by = 'movieid') 
 ```
 
 ```{r}
 # 对用户评论行为进行分析
 # 绘制用户每年平均评论数量变化
 ratings_year <- count(ratings, year)
-avg_ratings_year <- ratings_year[ratings_year$year > 1995,]$n / year_num[year_num$year > 1995,]$n
+avg_ratings_year <- ratings_year[ratings_year$year > 1990,]$n / year_num[year_num$year > 1990,]$n
 plot(avg_ratings_year, type = 'b', pch = 17, main = 'The average number of ratings every year per movie', ylab = 'The number of ratings', xlab = 'year',  xaxt = 'n', col = rainbow_hcl(2)[1])
-axis(1, at = 1996:2016, las = 1)
+axis(1, at = 1990:2000, las = 1)
 par(new = T)
-plot(ratings_year[ratings_year$year > 1995,], type = 'b', yaxt = 'n', ylab = NA , pch = 15, col = rainbow_hcl(2)[2])
+plot(ratings_year[ratings_year$year > 1990,], type = 'b', yaxt = 'n', ylab = NA , pch = 15, col = rainbow_hcl(2)[2])
 axis(side = 4, at = 0:300)
 # 绘制用户的每个月评分数量
 ratings_month <- count(ratings, month)
@@ -148,8 +155,14 @@ qplot(`mean(rating)`, data = ratings_by_title_50, binwidth = 0.01,fill = type)
 # 发现相似用户（用python计算用户相似度数据集,并存入mysql，再用R读入数据）
 library(DBI)
 library(RMySQL)
-con <- dbConnect(MySQL(),host="127.0.0.1",dbname="test",user="root",password="940720")
-dbDisconnect(con)
+#con <- dbConnect(MySQL(),host="127.0.0.1",dbname="R_report",user="root",password="940720")
+# 写movie_ratings表
+# dbWriteTable(con, "movie_ratings", movie_ratings)
+mrdb <- movie_ratings[, c(1, 2, 23, 24)]
+
+
+#dbWriteTable(con, "mrdb", mrdb)
+#dbDisconnect(con)
 # 构建推荐系统-基于用户行为的物品协同过滤
 
 
