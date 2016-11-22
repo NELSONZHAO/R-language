@@ -1,17 +1,21 @@
 ---
-title: "R Language Report"
+title: The Visualization of Movie Datasets Analysis and the Realization of Recommendation
+  System
+author: "Zhao Yeyu  21620018"
+date: "11/20/2016"
 output: html_document
 ---
-#Description
-This report attempts to use R language to do some useful and deep data analysis. R is used to analyze the movies data and users data included in the online movie review websites. Based on the results of statistical analysis, this paper then constructs the TopN recommendation model.<br>
-The report is divided into two parts. In the first part, the data sets are merged, transformed and analyzed using some built-in functions and self-defined functions after data import and preprocessing. for more convenient to be observed, the results are visualized by using visualization functions such as ggplot. In the second part, the user similarity data set is constructed based on the dataset. In addition, recommendation system is created by using the collaborative filtering algorithm based on user history dataset.
+#1 Description
+This report attempts to use R language to do some useful and deep data analysis. R is used to analyze the movies data, users data and ratings data included in the online movie review websites. Based on the results of statistical analysis, this paper then constructs the TopN recommendation model.<br>
+The report is divided into two parts. In the first part, the data sets are merged, transformed and analyzed using some built-in functions and self-defined functions after data importing and preprocessing. For more convenient to be observed, the results are visualized by using visualization functions such as ggplot. In the second part, the user similarity data set is constructed based on the dataset. In addition, recommendation system is created by using the collaborative filtering algorithm based on user history dataset.
 
-#Datasets
-There are three datasets included in this report.<br>
-###Movies
+#2 Datasets
+There are three datasets included in this report. The entire datasets contain more than 1 million ratings from 6,040 users on 4,000 movies.<br>
+
+##2.1 Movies
 
 |Attributes|Description|
-|:-------:|:-----:|
+|:-------:|:--------------------------------------------:|
 |movieid|MovieIDs range between 1 and 3952|
 |title|Titles are identical to titles provided by the IMDB (including year of release)|
 |genres|Each movie can belong to multiple genres|
@@ -38,7 +42,7 @@ Genres are pipe-separated and are selected from the following genres:
 * Western
 
 ***
-###Users
+##2.2 Users
 
 |Attributes|Description|
 |:-------:|:-----:|
@@ -83,16 +87,16 @@ Occupation is chosen from the following choices:
 * 20:  "writer"
 
 ***
-###Ratings
+##2.3 Ratings
 
 |Attributes|Description|
-|:-------:|:-----:|
+|:-------:|:-------------------------------------------------------:|
 |userid|UserIDs range between 1 and 6040|
 |movieid|MovieIDs range between 1 and 3952|
 |rating|Ratings are made on a 5-star scale (whole-star ratings only)|
 |timestamp|Timestamp is represented in seconds since the epoch as returned by time(2)|
 
-```{r, echo=FALSE, message=FALSE}
+```{r library, echo=FALSE, message=FALSE}
 # import library
 library(dplyr)
 library(tidyr)
@@ -100,19 +104,22 @@ library(ggplot2)
 library(DBI)
 library(RMySQL)
 ```
-##Import data
-As the R language can not directly read the ".dat" file, I use the MySQL to read the ".dat" file into database firstly.then, RMySQL package is used to read data from the database.
-```{r setup, echo=FALSE, message=FALSE}
+#3 Import data
+As the R language can not directly read the ".dat" file, I use the MySQL to read the ".dat" file into database firstly. Then, RMySQL package is used to read data from the database.
+```{r read_data, echo=FALSE, warning=FALSE}
 # import data
 con <- dbConnect(MySQL(),host="127.0.0.1",dbname="R_report",user="root",password="940720")
 movies <- dbReadTable(con, "movies")
 users <- dbReadTable(con, "users")
 ratings <- dbReadTable(con, "ratings")
 ```
-
-##数据处理及合并
-导入数据后，首先对电影数据集进行预处理，主要包括对数据的重塑和格式化。增加电影年份一列，并且将电影类型转换为dummy variables，方便后面的统计分析。最终输出的movies_final数据集按照电影上映年份进行了排列。
-```{r}
+#4 Data Analysis of "movies.dat"
+##4.1 Data Preprocessing
+After importing the data,  data preprocessing needed to be employed.
+There are two aspects in data preprocessing.<br>
+First, I used the regular expression to extract the movie release year from the column of "title", and generated a new column named "year" to store year data.
+Then, the column of "genres" in dataset is not convenient for me to process, so that I need to convert a categorical variable into a “dummy” or “indicator” matrix. If a column in a dataframe has k distinct values, we would derive a matrix or dataframe containing k columns containing all 1’s and 0’s. As a result, I have converted the column into "dummy" matrix, and combined the matrix with movie dataset. The output dataset is called "movies_final", which is ordered by "year".
+```{r preprocess_movies, echo=FALSE}
 # add a new column called year
 titles <- movies$title
 movies <- mutate(movies, year0 = substr(titles, regexpr('\\([0-9]{4}\\)', titles), regexpr('\\([0-9]{4}\\)', titles) + 5))
@@ -120,114 +127,127 @@ movies <- mutate(movies, year0 = substr(titles, regexpr('\\([0-9]{4}\\)', titles
 movies <- movies[order(movies$year0), ]
 movies <- mutate(movies, year = substr(movies$year0, regexpr('[0-9]{4}',  movies$year0), regexpr('[0-9]{4}', movies$year0) + 3))
 movies <- movies[, c('movieid', 'title', 'genres', 'year')]
-# 把电影类型生成dummy
+# convert the column "genre" into dummies
 all_genres <- unique(unlist(strsplit(movies$genres, '|', fixed = T)))
-# 将所有电影类型生成一个vector
+# vector
 genre <- all_genres[order(all_genres)]
-# 生成dummies的数据框
 dummies <- data.frame(matrix(0, nrow = dim(movies)[1], ncol = length(genre)))
 names(dummies) <- genre
-# 循环movies的genres列，将dummies对应位置赋为1
+# make a loop of the column of "genres", converting this column into a dummy matrixs
 for (i in 1:dim(movies)[1]){
   dummies[i, as.vector(unlist(strsplit(movies$genres[i], '|', fixed = T)))] = 1
 }
 # merge movies and dummies
 movies_final <- cbind.data.frame(movies[, -3], dummies)
 ```
+##4.2 Data Analysis
+###4.2.1 Statistics of movies genres
+First of all, I counted the number of different genres of movies in the data set, and then plotted the histogram and pie chart respectively.
 
-##对电影数据进行分析
-该部分对每年上映的电影进行统计，用柱状图显示各种类型电影的上映数量
-```{r}
+```{r plot1, echo=FALSE, message=FALSE}
+# histogram
 library(colorspace)
-# 电影数据的分类柱状图
 count_by_genres <- colSums(dummies)
 data1 <- count_by_genres[order(count_by_genres, decreasing = T)]
-barplot(data1, cex.names = 0.5, ylim = c(0, 2000), col = rainbow_hcl(length(data1)), main = 'The histogram of the number of movies by genres')
+barplot(data1, cex.names = 0.5, ylim = c(0, 2000), col = rainbow_hcl(length(data1)), main = 'The histogram of the number of movies by genres', xlab = 'The genre of movies', ylab = 'The number of movies')
 ```
 
-以扇形图的方式呈现各种电影的占比，我们发现drama和comedy类型的电影上映数量很多。
-```{r}
-# 电影数据的分类扇形图及fan图
+```{r plot1_2, echo=FALSE, message=FALSE}
+# use ggplot2 to plot the pie chart
 genres_pct <- data.frame(names(dummies), round(count_by_genres*100/sum(count_by_genres) ,2))
 names(genres_pct) <- c('genre', 'pct')
 genres_pct <- genres_pct[order(genres_pct$pct, decreasing = T),]
 pie_label <- paste(genres_pct$genre, genres_pct$pct, '%')
-
-ggplot(genres_pct, aes(x='', y = pct, fill = genre))+geom_bar(stat = "identity", width = 1) + coord_polar(theta = "y") + labs(x = "", y = "", title = "") + theme(legend.title = element_blank(), legend.position = "right") + scale_fill_discrete(breaks = genres_pct$genre, labels = pie_label)
+ggplot(genres_pct, aes(x='', y = pct, fill = genre)) + geom_bar(stat = "identity", width = 1) + coord_polar(theta = "y") + labs(x = "", y = "", title = "The pie chart of the number of movies by genres") + theme(legend.title = element_blank(), legend.position = "right") + scale_fill_discrete(breaks = genres_pct$genre, labels = pie_label)
 ```
 
-按照时间序列，统计每年上映的电影数量，以折线图的方式进行呈现
-```{r}
-library(plotrix)
-#fan.plot(count_by_genres, labels = names(dummies), col= terrain.colors(length(count_by_genres)), main = 'The fan plot of the proportion of each genre of movies')
-# 每年电影上映数量的变化（折线）
+From the histogram, we learn that Drama and Comedy accounted for the majority in the dataset. Compared to the minority, these two types of movies released far more than the Fantasy, Western and other types.
+From the pie chart, it's obvious that the number of Drama, Comedy and Action movies accounted for more than 50% of all movies. While the smallest number of films is less than 1% of all movies.
+Thinking about the actual experience, it is not difficult to find the reason. As a result of cultural differences between domestic and abroad, foreigners have stronger preferences to Drama, Comedy and Action, and thus the release of such movies would attract more custormers, indicating that the number of such movies released more; Compared with popular genres of movies, Western and Firm-Noir were rarely released.
+
+###4.2.2 Time Series statistics of movies released
+In accordance with the time series (year), I summed up the number of movies released each year and plotted the line graph.
+
+```{r plot2, echo=FALSE}
+# line chart
 year_num <- count(movies_final, year)
-plot(year_num, pch = 15, type = 'b', xlab = 'year', ylab = 'The number of movies', main = 'The number of movies released every year', col = rainbow(dim(year_num)[1]))
+plot(year_num[c(1:78),], pch = 19, type = 'b', cex = 2, xlab = 'year', ylab = 'The number of movies', main = 'The number of movies released every year', col = rainbow_hcl(dim(year_num)[1]))
 ```
 
-统计每年上映电影类型比例的变化，可以发现一些电影类型随着时间变化非常明显，而一些电影类型的上映比例几乎保持不变
-```{r}
-# 统计每年不同类型电影的上映数量
+From the line graph, we can see the number of movies released each year that in the dataset showed an upward trend. Although there have been some small fluctuations in the middle. 
+
+###4.2.3 Time Series statistics of different genres of movies released
+In this part, I would analyze the changes in the number of movies of different genres over time. In order to eliminate differences of the number of movies released each year, I present the data in the form of a pile-up scale histogram. 
+
+```{r plot3, echo=FALSE}
+# changes in different genres of movies released each year
 sum_genres_year <- function(x){
   expr <- paste('summarise(group_by(movies_final, year), sum(`', x, '`))', sep = '')
   eval(parse(text = expr))
 }
 result_sum_genres_year <- lapply(genre[1:length(genre)], sum_genres_year)
 result_genres_year <- data.frame(result_sum_genres_year)[,-seq(3,40,2)]
-accumulated_data <- result_genres_year[result_genres_year$year >= 1990, ]
+accumulated_data <- result_genres_year[result_genres_year$year >= 1980, ]
 names(accumulated_data) <- c('year', genre)
 accumulated_data_long <- gather(accumulated_data, genre, count, Action:Western)
-genre_stack <- ggplot(accumulated_data_long, mapping = aes(x=year,y=count,fill=genre))+geom_bar(stat = 'identity', position = 'fill')+labs(title = 'The stack hist of different genres movies by year')+ylab('Percentage')
+genre_stack <- ggplot(accumulated_data_long, mapping = aes(x=year,y=count,fill=genre)) + geom_bar(stat = 'identity', position = 'fill') + labs(title = 'The stack hist of different genres movies by year') + ylab('Percentage') + scale_x_discrete(breaks = seq(1980,2000,5))
 genre_stack
 ```
 
-##对评论数据进行预处理
-将评论数据中的timestamp转换成年月日以及时，并生成新的ratings表，同时将评论表与电影表进行连接，返回movies_ratings数据集
-```{r}
+From the results, most of the different genres of movies released each year remained stable in proportion from 1990 to 2000. But there have been some changes.
+
+* From 1980 to 2000, the release of the Comedy gradually increased in general, indicating that the market have more preferences to comdey; 
+* From 1980 to 2000, the release of the Musical gradually decreased in general. There are two main reasons. On the one hand, with the social development, the market acceptance of the Musical gradually reduced; on the other hand, the Musical can not give producer sufficient profits;
+* The proporion of Drama, Action, Romance and other popular movie genres that are in line with public tastes is almost unchanged.
+
+#5 Data Analysis of "ratings.dat"
+##5.1 Data Preprocessing
+The column "timestamp" of ratings dataset represents seconds since midnight Coordinated Universal Time (UTC) of January 1, 1970. First, in order to process the data conveniently, I converted the format of "timestamp" to "yyyy-mm-dd hh:mm:ss", and saved these data as new columns.
+```{r ratings_process, echo=FALSE, warning=FALSE, message=FALSE}
 library(lubridate)
-# 对ratings表进行处理，将timestamp格式进行转换
+# format conversion
 ratings$timestamp <- as.integer(ratings$timestamp)
 ratings <- mutate(ratings, date = as.POSIXct(timestamp, origin = '1970-01-01 00:00:00'), year = year(date), month = month(date), hour = hour(date))
 ratings <- ratings[, c('userid', 'movieid', 'rating', 'year', 'month', 'hour')]
-# 将movies表与ratings表进行连接
+# merge movies dataset and ratings dataset
 movies_ratings <- merge(movies_final, ratings, by = 'movieid') 
 ```
+##5.2 Data Analysis
+###5.2.1 Statistics of "Peak Month"
+In this part, I want to understand when the users post their comments. First, I count the number of comments that users posted by month, and presented the result by hisogram.
 
-对评分表进行分析，统计用户四年间评论总数量折线图
-```{r}
-# 对用户评论行为进行分析
-# 绘制用户每年评论数量变化
-#ratings_year <- count(ratings, year)
-#plot(ratings_year, type = 'b', pch = 17, main = 'The average number of ratings every year per movie', ylab = 'The number of ratings', xlab = 'year',  xaxt = 'n', col = rainbow_hcl(2)[1])
-#axis(1, at = 2000:2003, las = 1)
-```
-
-观察用户在不同月份的评论数量，发现用户评论的高峰月
-```{r}
-# 绘制用户的每个月评分数量
+```{r peak_month, echo=FALSE}
 ratings_month <- count(ratings, month)
-barplot(as.matrix(ratings_month)[,2], beside = T, col = rainbow_hcl(12), ylim = c(0, 300000), main = 'The number of ratings by month', names.arg = c(1:12), xlab = 'month', ylab = 'the number of ratings')
+month_name <- c('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+barplot(as.matrix(ratings_month)[,2], beside = T, col = rainbow_hcl(12), ylim = c(0, 300000), main = 'The number of ratings by month', names.arg = month_name, xlab = 'Month', ylab = 'The number of ratings')
 ```
 
-观察用户每天的评论时间点，发现用户发布评分的时间段
-```{r}
-# 绘制用户每天评论的时间点
+From the histogram, we can see that the number of comments posted each month varies widely. July, August, November and December are the peak months that users posted their comments, indicating that most users choose to watch online movies in the winter and summer vacation.
+
+###5.2.2 Statistics of "Rush Hour"
+After finishing the statistics of "peak month", the next step is to calculate the "rush hour" of users' comments. Here, I use heatmap to visualize the results.
+
+```{r rush_hour, echo=FALSE}
 ratings_hour <- count(ratings, hour)
 hour_table <- matrix(as.data.frame(ratings_hour)[,2], 3, 8, byrow = T, dimnames = list(c('night','day','evening'), paste(c(1:8), 'th', sep = '')))
-heatmap(hour_table, Rowv = NA, Colv = NA, cexRow = 1, cexCol = 1, xlab = 'Time Quantile', ylab = 'Time Span')
+heatmap(hour_table, Rowv = NA, Colv = NA, cexRow = 1.5, cexCol = 1.5, xlab = 'Time Quantile', ylab = 'Time Span', main = "The rush hour of users' comments")
 ```
 
-##对电影评分进行统计分析
-首先对电影-评分数据集进行预处理，去掉评分数量小于20的电影，以免对结果造成较大偏差，并按照评分的高低，为电影进行good、medium、bad的分类
-```{r}
-# 对电影评分进行分析
+In the heat map, each row represents a time period (night, day, evening), the horizontal axis represents the hour of current time period. Night is from 0:00 to 7:00(1th to 8th), day is from 8:00 to 15:00(1th to 8th), evening is from 16:00 to 23:00(1th to 8th). We learn that the rush hour of posting comments is among midnight, 7am, 2pm - 3pm and 6pm - 7pm.
+
+#6 Data Analysis of Merged Dataset
+##6.1 Data Preprocessing
+The preprocessing need to be employed before analysis. In order to avoid the large deviation of results, I removed the movies which has the small number of ratings less than 20. Next, I calculate the average score for each movie, and classify the movies according to the average score. Movies with ratings greater than 3.5 are classified as "good," and those with a score less than 2 are classified as "bad", others are classified as "medium".
+
+```{r merge_dataset, echo=FALSE}
+# Data analysis of ratings
 movies_ratings <- movies_ratings[, c(-3,-24,-25,-26,-27,-28)]
 count_ratings_by_title <- count(movies_ratings, title)
-# 计算所有电影的平均分过滤掉评论数量小于20条的电影
+# filter movies the number of whose ratings less than 20
 title_20 <- count_ratings_by_title[count_ratings_by_title$n >= 20, ]
 ratings_by_title <- summarise(group_by(movies_ratings, title), mean(rating), sd(rating))
 ratings_by_title_20 <- merge(ratings_by_title, title_20, by = 'title')
-# 给数据表增加电影好坏程度评价
+# create a new column that represents the classification of movies
 ratings_by_title_20 <- within(ratings_by_title_20, {
   type <- NA
   type[`mean(rating)` >= 3.5] <- 'good'
@@ -235,84 +255,222 @@ ratings_by_title_20 <- within(ratings_by_title_20, {
   type[`mean(rating)` < 2] <- 'bad'
 })
 ```
+##6.2  Data Analysis
+After data preprocessing, I will start to calculate the mean, standard deviation, and the number of reviews for each movie, and visualize the results.
 
-对电影评分数据中每部电影评分的均值、标准差以及评论数量，并且绘制交叉分析图，最后查看所有电影的平均评分分布
-```{r}
-# 按照评论数量
+```{r n_mean, echo=FALSE}
+# order by the number of ratings
 order_by_n <- ratings_by_title_20[order(ratings_by_title_20$n, decreasing = T),]
-# 按照均分排名
+# order by the mean of ratings
 order_by_mean <- ratings_by_title_20[order(ratings_by_title_20$`mean(rating)`, decreasing = T),]
-# 按照标准差排名（评分差异最大）
+# order by the sd of ratings
 order_by_sd <- ratings_by_title_20[order(ratings_by_title_20$`sd(rating)`, decreasing = T),]
-# 绘制电影的好坏程度与评论数量
-p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `mean(rating)`, y = n, colour = type))
+# the number of ratings ~ mean
+p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `mean(rating)`, y = n, colour = type)) + labs(title = 'The scatter plot of distribution (n ~ mean)', x = 'The mean rating of movies', y = 'The number of ratings')
 p + geom_point()
-# 绘制电影的评论数量与评分差异
-p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `sd(rating)`, y = n, colour = type))
-p + geom_point()
-# 绘制电影的好坏程度与评分差异
-p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `mean(rating)`, y = `sd(rating)`, colour = type))
-p + geom_point()
-# 绘制电影评分分布
-qplot(`mean(rating)`, data = ratings_by_title_20, binwidth = 0.1,fill = type)
 ```
 
-##对用户数据进行分析
-首先对用户数据进行预处理，将movies_ratings以及users表进行合并
-```{r}
+It can be seen from the figure that the number of ratings of movies has also increased with the increase in movie ratings. Compared with the "bad" movies, a number of "good" movies have more than 1,000 ratings. The number of ratings of all "bad" movies is below 500.
+
+The scatter plot of the number of ratings and sd is as follows.
+
+```{r n_sd, echo=FALSE}
+# the number of ratings ~ sd
+p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `sd(rating)`, y = n, colour = type)) + labs(title = 'The scatter plot of distribution (n ~ sd)', x = 'The sd of movie ratings', y = 'The number of ratings')
+p + geom_point()
+```
+
+As can be seen from the scatter plot, the standard deviation of most movies are less than 1.5, only a few of the movie ratings differ largely(sd> 1.5). Good movies are basically distributed in left of the figure, indicating that user ratings for good movies are more consistent. In contrast, the differences in the ratings of "medium" movies are relatively large.
+
+The scattor plot of the mean of ratings and sd is as follows.
+
+```{r mean_sd, echo=FALSE}
+# the mean of ratings ~ sd
+p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `mean(rating)`, y = `sd(rating)`, colour = type)) + labs(title = 'The scatter plot of distribution (mean ~ sd)', x = 'The mean rating of movies', y = 'The sd of movie ratings')
+p + geom_point()
+```
+
+It can be seen clearly from the figure that the approximate distribution of the scatters is close to parabolic. The differences of scores in "good" movies and "bad" movies are relatively small, while the differences of scores in "medium" movies are larger. This is because the user acceptance of these two types of movies("bad" and "good") is relatively consistent, while for movies which have relatively modest scores, evaluations from different users diverge largely.
+
+Finally, I would like to plot the distribution histogram of the average score of the movies.
+
+```{r, echo=FALSE}
+# The rating distribution of movies
+ggplot(data = ratings_by_title_20, aes(x = `mean(rating)`, y = ..density..)) + labs(title = "The rating distribution of movies", x = "The mean ratings of movies", y = "Frequency") + geom_histogram(bins = 30) + geom_density(color = "navy")
+```
+
+As can be seen from the figure, the distribution of the movie score roughly obeys the normal distribution. The overall average score is about 3.7, indicating that most movies have a relatively high score.
+
+#7 Data Analysis of "users.dat"
+##7.1 Data Preprocessing
+Before data analysis, I merge table "movies_ratings" and "users" into one table firstly. 
+```{r, echo=FALSE}
+# merge movies_ratings and users
 total_table <- merge(movies_ratings, users, by = 'userid')
 ```
-查看不同类型用户偏好什么类型或者哪些电影
-```{r}
-#用户的年龄分布
+##7.2 Data Analysis
+###7.2.1 User Information Analysis
+In this part, I carry out basic statistics on user information firstly, including the user's age distribution and the user's occupational distribution. The distribution diagrams are shown below.
+
+```{r ages, echo=FALSE, warning=FALSE}
+#The distribution of different ages
 users_age <- count(users, age)
-barplot(as.matrix(users_age)[,2], beside = T)
-#不同性别所喜好的电影
+ages <- c('Under 18', '18-24', '25-34', '35-44', '45-49', '50-55', '56+')
+barplot(as.matrix(users_age)[,2], names.arg = ages, main = 'The distribution of user ages', xlab = 'Age', ylab = 'The number of users', beside = T)
+```
+
+```{r occupations, echo=FALSE, warning=FALSE}
+#The distribution of different occupations
+users_job <- count(users, job)
+jobs <- c("other","academic/educator","artist","clerical/admin","college/grad student","customer service","doctor/health care","executive/managerial","farmer","homemaker","K-12 student","lawyer","programmer","retired","sales/marketing","scientist","self-employed","technician/engineer","tradesman/craftsman","unemployed","writer")
+jobs <- paste(c(1:21), ':', jobs)
+users_job <- data.frame(users_job)
+users_job[,1] <- as.character(users_job[,1])
+users_job[,1] <- paste(letters[1:21], users_job[,1], sep = '_')
+ggplot(users_job, aes(x = job, y = n, fill = job)) + geom_bar(stat = "identity", width = 0.7) + labs(title = "The distribution of users' occupations", x = 'Job', y = 'The number of users') + theme(legend.title = element_blank(), legend.position = "right") + scale_fill_discrete(breaks = users_job$job, labels = jobs) + scale_x_discrete(breaks=seq(1, 21, 1))
+```
+
+From the distribution map, we learn that users whose age between 25 and 34 years old account for the majority, and users whose age under 18 years old account for the least proportion, indicating that young people are more involved in online movie reviews.
+When it comes to occupational distribution, college/graduate students account for the majority of user groups. In addition, the eductors and writers also account for a certain proportion. But to our surprise, people who engage in some busy jobs, such as programer, technician/engineer and executives/managers, also spend some time on online movie reviews.
+
+###7.2.2 User Rating Analysis
+Here I want to analyze the scores of different users in different gender. I calculate the average score of each movie which rated by female and the average score which rated by male.
+
+```{r rating_gender, echo=FALSE, warning=FALSE, message=FALSE}
+#movies by gender
 movies_by_gender <- summarise(group_by(total_table, gender, title), mean(rating))
 movies_by_gender_20 <- merge(movies_by_gender, title_20, by = 'title')[-4]
 movies_by_gender_20 <- spread(movies_by_gender_20, gender, `mean(rating)`)
 p <- ggplot(data = movies_by_gender_20, mapping = aes(x = F, y = M))
-p + geom_point()
-#不同年龄所偏好的电影
+p + geom_point() + labs(title = 'The scatter plot of ratings of different gender')
+```
+
+It can be seen from the scatter plot, the distribution of ratings from users of different gender is roughly in line with the function y = x, indicating that the average score of the same movie from users in different gender is roughly the same, only a few average score of movies exist some differences. For example, in the left part of the scatter plot, the men score high on the movies, while women score very low.
+
+In order to understand the score from users in different ages, I use radarchart to visualize the result. I randomly select six movies to do visualization.
+
+```{r radarchart, echo=FALSE, warning=FALSE, message=FALSE}
+#movies by age
 movies_by_age <- summarise(group_by(total_table, age, title), mean(rating))
 movies_by_age_20 <- merge(movies_by_age, title_20, by = 'title')[-4]
 movies_by_age_20 <- spread(movies_by_age_20, age, `mean(rating)`)
-#不同职业对于电影类型的偏好
+radar_data <- movies_by_age_20[c(1:6), c(2:8)]
+radar_titles <- movies_by_age_20$title[1:6]
+#radar chart
+library(fmsb)
+opar <- par(mfrow = c(2:3))
+maxmin <- data.frame(a = c(5, 1), b = c(5, 1), c = c(5, 1), d = c(5, 1), e = c(5, 1), f = c(5, 1), g = c(5, 1))
+names(radar_data) <- letters[1:7]
+radar_plot <- function(x){
+  radarchart(rbind(maxmin, radar_data[x,]), vlabels = ages, axistype = 2, pcol = rainbow_hcl(6)[x], plty = 1,title = radar_titles[x], plwd = 2)
+}
+radarcharts <- lapply(c(1:6), radar_plot)
+par(opar)
+#movies by job
 movies_by_job <- summarise(group_by(total_table, job, title), mean(rating))
 movies_by_job_20 <- merge(movies_by_job, title_20, by = 'title')[-4]
 movies_by_job_20 <- spread(movies_by_job_20, job, `mean(rating)`)
-#不同类型电影中排名较���前的电影
+```
+
+From the radarcharts, we can clearly see that different age groups give the same movie different scores. For "Night mother", users whose age is between 18 and 24 and users whose age is greater than 56 give it a higher score, while users whose age is under 18 years old give it the lowest score.
+
+In order to view popular movies and boring movies more intuitively in a certain category of movies, I plot cross-scatter plots and add labels to the graph.
+
+```{r action, echo=FALSE}
+par(mfrow = c(1,1))
+#Find the popular movies in a certain genre
 Action_movies <- summarise(group_by(total_table, Action, title), mean(rating))
 Action_movies <- Action_movies[Action_movies$Action == 1,]
 Action_movies_20 <- merge(Action_movies, title_20, by = 'title')
 Action_movies_20 <- Action_movies_20[order(Action_movies_20$`mean(rating)`, decreasing = T), ][-2]
 #p <- ggplot(data = Action_movies_20, mapping = aes(x = `mean(rating)`, y = n))
 #p + geom_point()
-Action_ordered_first <- Action_movies_20[order(Action_movies_20$`mean(rating)`, decreasing = T), ][c(1:20),]
-Action_ordered_last <- Action_movies_20[order(Action_movies_20$`mean(rating)`), ][c(1:20),]
-plot(Action_movies_20$`mean(rating)`, Action_movies_20$n)
-text(Action_ordered_first$`mean(rating)`, Action_ordered_first$n, Action_ordered_first$title, cex = 0.5, col = 'red')
-text(Action_ordered_last$`mean(rating)`, Action_ordered_last$n, Action_ordered_last$title, cex = 0.5, col = 'blue')
+Action_ordered_first <- Action_movies_20[order(Action_movies_20$`mean(rating)`, decreasing = T), ][c(1:10),]
+Action_ordered_last <- Action_movies_20[order(Action_movies_20$`mean(rating)`), ][c(1:10),]
+plot(Action_movies_20$`mean(rating)`, Action_movies_20$n, pch = 19, main = "The cross-scatter plot for average score and the number of ratings", xlab = "The average score of Action", ylab = "The number of ratings of Action", cex = 0.7)
+text(Action_ordered_first$`mean(rating)`, (Action_ordered_first$n)+50, Action_ordered_first$title, cex = 0.5, col = "red")
+text(Action_ordered_last$`mean(rating)`, (Action_ordered_last$n)+50, Action_ordered_last$title, cex = 0.5, col = "blue")
 ```
 
-```{r}
-# 推荐系统
+From the scatter plot, we can clearly see the distribution of Action movies. In the top right corner of the map, the top 10 popular action movies are marked, and in the bottom left of the chart, the top 10 boring action movies are marked.
+
+#8 Recommendation System
+##8.1 Introduction
+After the data analysis, we have a more complete understanding of the data set. In this section, I would like to use the entire data set to build a movie recommendation system, using object-based collaborative filtering algorithm. In the R language, the library "Recommenderlab" can achieve this function. 
+
+##8.2 Modeling
+In general, the two common algorithms used in recommendation system include user-based collaborative filtering and item-based collaborative filtering.The user-based filtering will probably work well for a few thousand people or items, but a very large site like Amazon has millions of customers and products—comparing a user with every other user and then comparing every product each user has rated can be very slow. Also, a site that sells millions of products may have very little overlap between people, which can make it difficult to decide which people are similar. However, in cases with very large datasets, item-based collaborative filtering can give better results, and it allows many of the calculations to be performed in advance so that a user needing recommendations can get them more quickly.<br>
+In conclusion, in order to get a better result, I would like to build the model based on item-based collaborative filtering.
+
+```{r preprocess, message=FALSE}
+#Import library
+library(registry)
 library(reshape)
 library(recommenderlab)
+#Convert long to wide
 ratings_long <- ratings[,c(1,2,3)]
 ratings_wide <- cast(ratings_long, userid ~ movieid, value = "rating")
-# 转换属性
+#convert format
 class(ratings_wide) <- "data.frame"
 useritem <- as.matrix(ratings_wide)
-# 转换为realRatingMaxtrix
+#convert into realRatingMaxtrix
 rating_matrix <- as(useritem, "realRatingMatrix")
-#给列转换名字
+#change the column name
 colnames(rating_matrix) <- paste("movie", 1:3707, sep = "")
-#构建模型
-recommend_model <- Recommender(rating_matrix, method = "IBCF")
-# 预测
-predict1 <- predict(recommend_model, rating_matrix[1], n = 5)
-as(predict1, 'list')
-
-
 ```
+
+Then I use the function Recommender to create model, "method = 'IBCF'" means that recommender algorithm that I use is item-based collaborative filtering.there are total 6040 users in the dataset, so I use the first 6,020 users' records to train the model, and do recommendations for last 10 users.
+
+```{r modeling, message=FALSE}
+recommend_model <- Recommender(rating_matrix[1:6020], method = "IBCF")
+```
+
+##8.3 Prediction
+After modeling, I can do prediction based on the model. The prediction method mainly includes top-n prediction and rating prediction. Amazon former scientist Greg Linden has published an essay in 2009, this article pointed out that the purpose of movie recommendation is to dig the movies that users are interested in, rather than predict the rating that user would like to assign. Therefore, TopN recommendations are more in line with the actual application requirements. There may be a movie that user would like to give a high score after watching, but it has a low possibility for the user to watch.
+
+```{r prediction, message=FALSE}
+library(stringr)
+predict1 <- predict(recommend_model, rating_matrix[6040], n = 5)
+predict_result <- as(predict1, 'list')[1]
+#Extract the movieid
+recom <- str_extract_all(predict_result, "[0-9]+")[[1]]
+recommendations <- data.frame(movieid = recom)
+```
+
+Using the 6040th user as an example, we can see that the recommendation results are as follows:
+
+```{r recommendations}
+merge(movies, recommendations, by = 'movieid')
+```
+
+##8.4 Model Assessment
+In addition to item-based collaborative filtering, the recommendation algorithm also includes popularity-based recommendation and user-based collaborative filtering algorithm. This part will evaluate these three recommendation algorithms by using the results of score prediction.I divide the dataset into training set and test set according to 9: 1 ratio.
+
+```{r assessment, echo=FALSE}
+model_assess <- evaluationScheme(rating_matrix, method = "split", train = 0.9, given = 15, goodRating = 5)
+model_popular <- Recommender(getData(model_assess, "train"), method = "POPULAR")
+model_ubcf <- Recommender(getData(model_assess, "train"), method = "UBCF")
+model_ibcf <- Recommender(getData(model_assess, "train"), method = "IBCF")
+#make prediction
+predict_popular <- predict(model_popular, getData(model_assess, "known"), type = "ratings")
+predict_ubcf <- predict(model_ubcf, getData(model_assess, "known"), type = "ratings")
+predict_ibcf <- predict(model_ibcf, getData(model_assess, "known"), type = "ratings")
+#calculate prediction error
+error <- rbind(calcPredictionAccuracy(predict_popular, getData(model_assess, "unknown")), calcPredictionAccuracy(predict_ubcf, getData(model_assess, "unknown")), calcPredictionAccuracy(predict_ibcf, getData(model_assess, "unknown")))
+rownames(error) <- c("POPULAR", "UBCF", "IBCF")
+error <- error[,c(1,3)]
+error
+```
+
+In model assessment, RMSE(Root Mean Squared Error) and MAE(Mean Absolute Error) are used as the measure of estimated error. From
+the results, we can see that the prediction error of IBCF(item-based collaborative filtering) is the least, confirming what I have mentioned in the "Modeling" part.
+
+#9 Report Summary
+In terms of the content, this report is mainly divided into two aspects, including data analysis and recommendation system. For the first part, I did some statistics on the datasets and visualized the results. And for the other part, recommendation systems are built based on the library "recommenderlab" to recommend movies to users.
+On the technical side, in addition to R language, MySQL and Python are also used to aid analyzing data. Because R cannot read ".dat" file directly, so MySQL is used to store the datasets. Besides, the memory management mechanism of R is poor, resulting that it is very slow to process big data, but Python can perform better.<br>
+At the beginning, I decided to use the full-size datasets(more than 20 million pieces of data) to do the analysis, but it is too hard for R to analyze such large datasets. As a result, smaller datasets (more than 1 million pieces of data) are used in this report.<br>
+Although R is poor in dealing with bid data, but its functions of data visualization are very powerful, so that R and Python can be combined for data analysis in the future.
+
+>The detail description of datasets and the  MySQL data operation statements are all posted to my [GitHub](https://github.com/NELSONZHAO/R-language) [^1].<br>
+
+[^1]: Statement: All the contents and ideas of this report are original, the relevant information has been posted to GitHub (Nelson ZHao).
