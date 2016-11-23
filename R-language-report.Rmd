@@ -3,11 +3,11 @@ title: The Visualization of Movie Datasets Analysis and the Realization of Recom
   System
 author: "Zhao Yeyu  21620018"
 date: "11/20/2016"
-output: html_document
+output: pdf_document
 ---
 #1 Description
 This report attempts to use R language to do some useful and deep data analysis. R is used to analyze the movies data, users data and ratings data included in the online movie review websites. Based on the results of statistical analysis, this paper then constructs the TopN recommendation model.<br>
-The report is divided into two parts. In the first part, the data sets are merged, transformed and analyzed using some built-in functions and self-defined functions after data importing and preprocessing. For more convenient to be observed, the results are visualized by using visualization functions such as ggplot. In the second part, the user similarity data set is constructed based on the dataset. In addition, recommendation system is created by using the collaborative filtering algorithm based on user history dataset.
+The report is divided into two parts. In the first part, the datasets are merged, transformed and analyzed using some built-in functions and self-defined functions after data importing and preprocessing. In order to observe the results more conveniently, the results are visualized by using visualization functions such as ggplot. In the second part, recommendation system is created by using the collaborative filtering algorithm based on user history dataset.
 
 #2 Datasets
 There are three datasets included in this report. The entire datasets contain more than 1 million ratings from 6,040 users on 4,000 movies.<br>
@@ -15,7 +15,7 @@ There are three datasets included in this report. The entire datasets contain mo
 ##2.1 Movies
 
 |Attributes|Description|
-|:-------:|:--------------------------------------------:|
+|:-------:|:------------------------------------------:|
 |movieid|MovieIDs range between 1 and 3952|
 |title|Titles are identical to titles provided by the IMDB (including year of release)|
 |genres|Each movie can belong to multiple genres|
@@ -90,7 +90,7 @@ Occupation is chosen from the following choices:
 ##2.3 Ratings
 
 |Attributes|Description|
-|:-------:|:-------------------------------------------------------:|
+|:-------:|:------------------------------------:|
 |userid|UserIDs range between 1 and 6040|
 |movieid|MovieIDs range between 1 and 3952|
 |rating|Ratings are made on a 5-star scale (whole-star ratings only)|
@@ -104,11 +104,11 @@ library(ggplot2)
 library(DBI)
 library(RMySQL)
 ```
-#3 Import data
-As the R language can not directly read the ".dat" file, I use the MySQL to read the ".dat" file into database firstly. Then, RMySQL package is used to read data from the database.
+#3 Import Data
+As the R language can not directly read the ".dat" file, I use MySQL to read the ".dat" file into database firstly. Then, RMySQL package is used to read data from the MySQL database. The SQL statements are available on my GitHub.
 ```{r read_data, echo=FALSE, warning=FALSE}
 # import data
-con <- dbConnect(MySQL(),host="127.0.0.1",dbname="R_report",user="root",password="940720")
+con <- dbConnect(MySQL(), host="127.0.0.1", dbname="R_report", user="root", password="940720")
 movies <- dbReadTable(con, "movies")
 users <- dbReadTable(con, "users")
 ratings <- dbReadTable(con, "ratings")
@@ -117,8 +117,8 @@ ratings <- dbReadTable(con, "ratings")
 ##4.1 Data Preprocessing
 After importing the data,  data preprocessing needed to be employed.
 There are two aspects in data preprocessing.<br>
-First, I used the regular expression to extract the movie release year from the column of "title", and generated a new column named "year" to store year data.
-Then, the column of "genres" in dataset is not convenient for me to process, so that I need to convert a categorical variable into a “dummy” or “indicator” matrix. If a column in a dataframe has k distinct values, we would derive a matrix or dataframe containing k columns containing all 1’s and 0’s. As a result, I have converted the column into "dummy" matrix, and combined the matrix with movie dataset. The output dataset is called "movies_final", which is ordered by "year".
+First, I used the regular expression to extract the release year of movie from the column of "title", and generated a new column named "year" to store year data.
+Then, the column of "genres" in dataset is not convenient for me to process, so that I need to convert a categorical variable into a “dummy” or “indicator” matrix. If a column in a dataframe has k distinct values, we would derive a matrix or dataframe containing k columns containing all 1’s and 0’s. As a result, I have converted the column into "dummy" matrix, and combined the matrix with the movie dataset. The output dataset is called "movies_final", which is ordered by "year".
 ```{r preprocess_movies, echo=FALSE}
 # add a new column called year
 titles <- movies$title
@@ -142,7 +142,7 @@ movies_final <- cbind.data.frame(movies[, -3], dummies)
 ```
 ##4.2 Data Analysis
 ###4.2.1 Statistics of movies genres
-First of all, I counted the number of different genres of movies in the data set, and then plotted the histogram and pie chart respectively.
+First of all, I counted the number of movies classified in each genre in the dataset, and then plotted the histogram and pie chart respectively.
 
 ```{r plot1, echo=FALSE, message=FALSE}
 # histogram
@@ -162,10 +162,10 @@ ggplot(genres_pct, aes(x='', y = pct, fill = genre)) + geom_bar(stat = "identity
 ```
 
 From the histogram, we learn that Drama and Comedy accounted for the majority in the dataset. Compared to the minority, these two types of movies released far more than the Fantasy, Western and other types.
-From the pie chart, it's obvious that the number of Drama, Comedy and Action movies accounted for more than 50% of all movies. While the smallest number of films is less than 1% of all movies.
+From the pie chart, it's obvious that the number of Drama, Comedy and Action movies accounted for more than 50% of all movies. While the smallest number of movies is less than 1% of all movies.
 Thinking about the actual experience, it is not difficult to find the reason. As a result of cultural differences between domestic and abroad, foreigners have stronger preferences to Drama, Comedy and Action, and thus the release of such movies would attract more custormers, indicating that the number of such movies released more; Compared with popular genres of movies, Western and Firm-Noir were rarely released.
 
-###4.2.2 Time Series statistics of movies released
+###4.2.2 Time Series Statistics of Movies Released
 In accordance with the time series (year), I summed up the number of movies released each year and plotted the line graph.
 
 ```{r plot2, echo=FALSE}
@@ -176,8 +176,8 @@ plot(year_num[c(1:78),], pch = 19, type = 'b', cex = 2, xlab = 'year', ylab = 'T
 
 From the line graph, we can see the number of movies released each year that in the dataset showed an upward trend. Although there have been some small fluctuations in the middle. 
 
-###4.2.3 Time Series statistics of different genres of movies released
-In this part, I would analyze the changes in the number of movies of different genres over time. In order to eliminate differences of the number of movies released each year, I present the data in the form of a pile-up scale histogram. 
+###4.2.3 Time Series Statistics of Different Genres of Movies Released
+In this part, I would like to analyze the changes in the number of movies of different genres over time. In order to eliminate the effects generated by differences of the number of movies released each year, I present the data in the form of a pile-up scale histogram. 
 
 ```{r plot3, echo=FALSE}
 # changes in different genres of movies released each year
@@ -212,6 +212,7 @@ ratings <- ratings[, c('userid', 'movieid', 'rating', 'year', 'month', 'hour')]
 # merge movies dataset and ratings dataset
 movies_ratings <- merge(movies_final, ratings, by = 'movieid') 
 ```
+
 ##5.2 Data Analysis
 ###5.2.1 Statistics of "Peak Month"
 In this part, I want to understand when the users post their comments. First, I count the number of comments that users posted by month, and presented the result by hisogram.
@@ -230,7 +231,7 @@ After finishing the statistics of "peak month", the next step is to calculate th
 ```{r rush_hour, echo=FALSE}
 ratings_hour <- count(ratings, hour)
 hour_table <- matrix(as.data.frame(ratings_hour)[,2], 3, 8, byrow = T, dimnames = list(c('night','day','evening'), paste(c(1:8), 'th', sep = '')))
-heatmap(hour_table, Rowv = NA, Colv = NA, cexRow = 1.5, cexCol = 1.5, xlab = 'Time Quantile', ylab = 'Time Span', main = "The rush hour of users' comments")
+heatmap(hour_table, Rowv = NA, Colv = NA, cexRow = 1, cexCol = 1, xlab = 'Time Quantile', ylab = 'Time Span', main = "The rush hour of users' comments")
 ```
 
 In the heat map, each row represents a time period (night, day, evening), the horizontal axis represents the hour of current time period. Night is from 0:00 to 7:00(1th to 8th), day is from 8:00 to 15:00(1th to 8th), evening is from 16:00 to 23:00(1th to 8th). We learn that the rush hour of posting comments is among midnight, 7am, 2pm - 3pm and 6pm - 7pm.
@@ -267,17 +268,17 @@ order_by_mean <- ratings_by_title_20[order(ratings_by_title_20$`mean(rating)`, d
 order_by_sd <- ratings_by_title_20[order(ratings_by_title_20$`sd(rating)`, decreasing = T),]
 # the number of ratings ~ mean
 p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `mean(rating)`, y = n, colour = type)) + labs(title = 'The scatter plot of distribution (n ~ mean)', x = 'The mean rating of movies', y = 'The number of ratings')
-p + geom_point()
+p + geom_point() + geom_smooth()
 ```
 
-It can be seen from the figure that the number of ratings of movies has also increased with the increase in movie ratings. Compared with the "bad" movies, a number of "good" movies have more than 1,000 ratings. The number of ratings of all "bad" movies is below 500.
+It can be seen from the figure that the number of ratings of movies has also soared with the increase in movie ratings. Compared with the "bad" movies, a number of "good" movies have more than 1,000 ratings. The number of ratings of all "bad" movies is below 500.
 
 The scatter plot of the number of ratings and sd is as follows.
 
 ```{r n_sd, echo=FALSE}
 # the number of ratings ~ sd
 p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `sd(rating)`, y = n, colour = type)) + labs(title = 'The scatter plot of distribution (n ~ sd)', x = 'The sd of movie ratings', y = 'The number of ratings')
-p + geom_point()
+p + geom_point() + geom_smooth()
 ```
 
 As can be seen from the scatter plot, the standard deviation of most movies are less than 1.5, only a few of the movie ratings differ largely(sd> 1.5). Good movies are basically distributed in left of the figure, indicating that user ratings for good movies are more consistent. In contrast, the differences in the ratings of "medium" movies are relatively large.
@@ -287,7 +288,7 @@ The scattor plot of the mean of ratings and sd is as follows.
 ```{r mean_sd, echo=FALSE}
 # the mean of ratings ~ sd
 p <- ggplot(data = ratings_by_title_20, mapping = aes(x = `mean(rating)`, y = `sd(rating)`, colour = type)) + labs(title = 'The scatter plot of distribution (mean ~ sd)', x = 'The mean rating of movies', y = 'The sd of movie ratings')
-p + geom_point()
+p + geom_point() + geom_smooth()
 ```
 
 It can be seen clearly from the figure that the approximate distribution of the scatters is close to parabolic. The differences of scores in "good" movies and "bad" movies are relatively small, while the differences of scores in "medium" movies are larger. This is because the user acceptance of these two types of movies("bad" and "good") is relatively consistent, while for movies which have relatively modest scores, evaluations from different users diverge largely.
@@ -308,6 +309,7 @@ Before data analysis, I merge table "movies_ratings" and "users" into one table 
 # merge movies_ratings and users
 total_table <- merge(movies_ratings, users, by = 'userid')
 ```
+
 ##7.2 Data Analysis
 ###7.2.1 User Information Analysis
 In this part, I carry out basic statistics on user information firstly, including the user's age distribution and the user's occupational distribution. The distribution diagrams are shown below.
@@ -316,7 +318,7 @@ In this part, I carry out basic statistics on user information firstly, includin
 #The distribution of different ages
 users_age <- count(users, age)
 ages <- c('Under 18', '18-24', '25-34', '35-44', '45-49', '50-55', '56+')
-barplot(as.matrix(users_age)[,2], names.arg = ages, main = 'The distribution of user ages', xlab = 'Age', ylab = 'The number of users', beside = T)
+barplot(as.matrix(users_age)[,2], names.arg = ages, cex.names = 0.7, main = 'The distribution of user ages', xlab = 'Age', ylab = 'The number of users', beside = T)
 ```
 
 ```{r occupations, echo=FALSE, warning=FALSE}
@@ -342,7 +344,7 @@ movies_by_gender <- summarise(group_by(total_table, gender, title), mean(rating)
 movies_by_gender_20 <- merge(movies_by_gender, title_20, by = 'title')[-4]
 movies_by_gender_20 <- spread(movies_by_gender_20, gender, `mean(rating)`)
 p <- ggplot(data = movies_by_gender_20, mapping = aes(x = F, y = M))
-p + geom_point() + labs(title = 'The scatter plot of ratings of different gender')
+p + geom_point() + labs(title = 'The scatter plot of ratings of different gender') + geom_smooth()
 ```
 
 It can be seen from the scatter plot, the distribution of ratings from users of different gender is roughly in line with the function y = x, indicating that the average score of the same movie from users in different gender is roughly the same, only a few average score of movies exist some differences. For example, in the left part of the scatter plot, the men score high on the movies, while women score very low.
@@ -388,8 +390,8 @@ Action_movies_20 <- Action_movies_20[order(Action_movies_20$`mean(rating)`, decr
 Action_ordered_first <- Action_movies_20[order(Action_movies_20$`mean(rating)`, decreasing = T), ][c(1:10),]
 Action_ordered_last <- Action_movies_20[order(Action_movies_20$`mean(rating)`), ][c(1:10),]
 plot(Action_movies_20$`mean(rating)`, Action_movies_20$n, pch = 19, main = "The cross-scatter plot for average score and the number of ratings", xlab = "The average score of Action", ylab = "The number of ratings of Action", cex = 0.7)
-text(Action_ordered_first$`mean(rating)`, (Action_ordered_first$n)+50, Action_ordered_first$title, cex = 0.5, col = "red")
-text(Action_ordered_last$`mean(rating)`, (Action_ordered_last$n)+50, Action_ordered_last$title, cex = 0.5, col = "blue")
+text(Action_ordered_first$`mean(rating)`, (Action_ordered_first$n) + 50, Action_ordered_first$title, cex = 0.5, col = "mediumblue")
+text(Action_ordered_last$`mean(rating)`, (Action_ordered_last$n) + 50, Action_ordered_last$title, cex = 0.5, col = "magenta")
 ```
 
 From the scatter plot, we can clearly see the distribution of Action movies. In the top right corner of the map, the top 10 popular action movies are marked, and in the bottom left of the chart, the top 10 boring action movies are marked.
@@ -473,4 +475,4 @@ Although R is poor in dealing with bid data, but its functions of data visualiza
 
 >The detail description of datasets and the  MySQL data operation statements are all posted to my [GitHub](https://github.com/NELSONZHAO/R-language) [^1].<br>
 
-[^1]: Statement: All the contents and ideas of this report are original, the relevant information has been posted to GitHub (Nelson ZHao).
+[^1]: Statement: All the contents and ideas of this report are original, the relevant information has been posted to GitHub (Nelson Zhao).
